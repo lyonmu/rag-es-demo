@@ -84,7 +84,7 @@ def create_app() -> FastAPI:
     from app.core.response import ApiResponse
 
     # Health check
-    @app.get("/health")
+    @app.get(api_prefix + "/health")
     async def health():
         return ApiResponse.success(data={"status": "ok"})
 
