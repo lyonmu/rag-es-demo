@@ -84,19 +84,16 @@ async def chat_stream(
     try:
         # 1. Retrieve
         sources = await hybrid_search(kb_id, query, top_k=top_k)
-
-        # 2. Send source docs
         source_docs = _to_source_docs(sources)
-        yield _sse_event("sources", [doc.model_dump() for doc in source_docs])
 
-        # 3. Build Prompt
+        # 2. Build Prompt
         context = _build_context(sources)
         messages = [
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(content=f"参考资料：\n{context}\n\n用户问题：{query}"),
         ]
 
-        # 4. Initialize LLM
+        # 3. Initialize LLM
         llm = ChatOpenAI(
             model=settings.llm_model,
             api_key=settings.llm_api_key,
@@ -107,17 +104,20 @@ async def chat_stream(
             timeout=settings.llm_timeout,
         )
 
-        # 5. Stream answer
+        # 4. Stream answer first
         answer_parts = []
         async for chunk in llm.astream(messages):
             if chunk.content:
                 answer_parts.append(chunk.content)
                 yield _sse_event("token", chunk.content)
 
-        # 6. Send done event
+        # 5. Send done event with answer and sources
         full_answer = "".join(answer_parts)
         done_data = ChatDoneData(answer=full_answer, sources=source_docs)
         yield _sse_event("done", done_data.model_dump())
+
+        # 6. Send sources at the end
+        yield _sse_event("sources", [doc.model_dump() for doc in source_docs])
 
     except Exception as e:
         logger.exception("Chat stream error for kb=%s query=%s", kb_id, query)
