@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual env
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Poetry
+.poetry/
+
+# Data (keep models and uploads structure)
+data/output/
+data/output1/
+data/uploads/*.md
+
+.env
+.pytest_cache/
+data/
