@@ -2,24 +2,35 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
-from app.core import get_kb_info
+from app.core import get_kb, get_error_message
+from app.core.error_codes import KB_NOT_FOUND, SEARCH_ERROR
+from app.core.response import ApiResponse
 from app.retrievers import hybrid_search
 from app.schemas import SearchRequest
-from app.schemas.response import SearchResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/kb/{kb_id}/search", tags=["search"])
 
 
-@router.post("", response_model=SearchResponse)
+@router.post("")
 async def search(kb_id: str, body: SearchRequest):
     """Hybrid search in a knowledge base."""
-    info = await get_kb_info(kb_id)
-    if info is None:
-        raise HTTPException(status_code=404, detail=f"Knowledge base '{kb_id}' not found")
+    # Verify KB exists
+    kb = get_kb(kb_id)
+    if kb is None:
+        return ApiResponse.error(code=KB_NOT_FOUND, message="知识库不存在")
 
-    results = await hybrid_search(kb_id, body.query, top_k=body.top_k)
-    return SearchResponse(results=results, total=len(results))
+    try:
+        results = await hybrid_search(kb_id, body.query, top_k=body.top_k)
+        return ApiResponse.success(
+            data={
+                "results": [item.model_dump() for item in results],
+                "total": len(results),
+            }
+        )
+    except Exception as e:
+        logger.exception("Search failed for kb=%s query=%s", kb_id, body.query)
+        return ApiResponse.error(code=SEARCH_ERROR, message=f"检索失败: {e}")

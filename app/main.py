@@ -7,7 +7,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.core import close_es_client, init_es_client, get_embedder
+from app.core import (
+    close_es_client,
+    init_db,
+    init_es_client,
+    get_embedder,
+    register_exception_handler,
+)
 from app.routers import chat_router, kb_router, search_router, upload_router
 
 logging.basicConfig(
@@ -22,6 +28,10 @@ async def lifespan(app: FastAPI):
     """Application lifecycle: init on startup, cleanup on shutdown."""
     # Startup
     logger.info("Starting RAG-ES-Demo...")
+
+    # Initialize SQLite KB store
+    init_db()
+    logger.info("SQLite KB store initialized")
 
     # Initialize ES
     await init_es_client()
@@ -61,11 +71,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Register routers
-    app.include_router(kb_router)
-    app.include_router(upload_router)
-    app.include_router(search_router)
-    app.include_router(chat_router)
+    # Register global exception handler (unified ApiResponse)
+    register_exception_handler(app)
+
+    # Register routers with API versioning prefix
+    api_prefix = "/rag/api/v1"
+    app.include_router(kb_router, prefix=api_prefix)
+    app.include_router(upload_router, prefix=api_prefix)
+    app.include_router(search_router, prefix=api_prefix)
+    app.include_router(chat_router, prefix=api_prefix)
 
     # Health check
     @app.get("/health")
