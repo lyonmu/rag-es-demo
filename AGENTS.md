@@ -20,6 +20,9 @@ poetry run uvicorn app.main:app --reload
 
 # Start prod server
 poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Start ES (Docker Compose)
+docker compose up -d
 ```
 
 ## Prerequisites (must be running)
@@ -33,7 +36,17 @@ poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
    - `dense_vector` does NOT support `index: true` — must use `script_score`
 2. **Local embedding model** at `data/models/bge-small-zh-v1.5/` (已提交到仓库)
 3. LLM 使用 OpenAI 兼容协议 — 通过 `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` 配置
-4. SSE 问答使用 JSON 事件流: `{"type": "sources"|"token"|"done"|"error", "data": ...}`
+4. **IK 分词器安装**: `curl -L -o plugins/analysis-ik.zip https://get.infini.cloud/elasticsearch/analysis-ik/7.10.0 && unzip plugins/analysis-ik.zip -d plugins/analysis-ik/ && docker compose restart es`
+
+## Architecture & Key Decisions
+
+- **API prefix**: all routes under `/rag/api/v1` (set via `include_router(prefix=...)` in `main.py`)
+- **Unified response**: all endpoints return HTTP 200 + `{code, message, data}`, never raw dicts
+  - Global exception handler in `register_exception_handler(app)` converts HTTPException → ApiResponse
+  - Error codes: `100xx` system, `101xx` KB, `102xx` search, `103xx` chat
+- **SQLite KB store** (`app/core/kb_store.py`): stores name, description, index_name, doc_count. DB at `data/kb_store.db`.
+- **SSE event order**: token (stream) → done (full answer + sources) → sources (references at end)
+- **LangChain usage**: only `ChatOpenAI` for LLM streaming — no LCEL/chain orchestration, RAG pipeline is handwritten
 
 ## Testing
 
@@ -42,6 +55,7 @@ poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
 - When writing new router tests, use `from tests.conftest import create_test_app` to get an app without ES connection
 - Pure logic tests (chunker, RRF) need no mocking
 - Service tests mock `get_es_client` and `encode_texts`
+- Router test paths must include `/rag/api/v1/` prefix
 
 ## .env
 
@@ -51,4 +65,4 @@ poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## .gitignore
 
-Excludes: `__pycache__`, `data/output/`, `data/output1/`, `data/uploads/*.md`, `.env`
+Excludes: `__pycache__`, `data/output/`, `data/output1/`, `data/uploads/*.md`, `.env`, `data/kb_store.db`
