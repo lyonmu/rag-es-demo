@@ -81,10 +81,12 @@ def create_app() -> FastAPI:
     app.include_router(search_router, prefix=api_prefix)
     app.include_router(chat_router, prefix=api_prefix)
 
+    from app.core.response import ApiResponse
+
     # Health check
     @app.get("/health")
     async def health():
-        return {"status": "ok"}
+        return ApiResponse.success(data={"status": "ok"})
 
     return app
 

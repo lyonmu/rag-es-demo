@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import settings
+from app.core.error_codes import SUCCESS, LLM_CALL_ERROR, get_error_message
 from app.retrievers import hybrid_search
 from app.schemas.response import ChatDoneData, ChatErrorData, SearchResultItem, SourceDoc
 
@@ -53,9 +54,21 @@ def _to_source_docs(sources: list[SearchResultItem]) -> list[SourceDoc]:
     ]
 
 
-def _sse_event(event_type: str, data: dict | str) -> str:
-    """Format an SSE event string."""
-    return f"event: message\ndata: {json.dumps({'type': event_type, 'data': data}, ensure_ascii=False)}\n\n"
+def _sse_event(event_type: str, content: dict | str) -> str:
+    """Format an SSE event with unified {code, message, data} structure."""
+    if event_type == "error":
+        payload = {
+            "code": LLM_CALL_ERROR,
+            "message": get_error_message(LLM_CALL_ERROR),
+            "data": {"type": "error", "content": content},
+        }
+    else:
+        payload = {
+            "code": SUCCESS,
+            "message": get_error_message(SUCCESS),
+            "data": {"type": event_type, "content": content},
+        }
+    return f"event: message\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 async def chat_stream(
