@@ -1,13 +1,77 @@
 # RAG-ES-Demo
 
-基于 Elasticsearch 7.10 的中文 RAG 问答系统。
+基于 Elasticsearch 7.10 的中文 RAG 问答系统，支持多知识库管理、混合检索、SSE 流式问答。
+
+## 项目概览
+
+### 技术栈
+
+| 层级 | 技术选型 | 说明 |
+|------|----------|------|
+| **Web 框架** | FastAPI + Uvicorn | 异步 ASGI 服务器，自动生成交互式 API 文档 |
+| **向量检索** | Elasticsearch 7.10 | 中文 IK 分词器 + BM25 全文检索 + script_score 向量相似度 |
+| **Embedding** | BGE-Small-ZH-v1.5 | 本地 SentenceTransformer 模型，512 维向量 |
+| **大语言模型** | LangChain + OpenAI 兼容协议 | 兼容任何支持 OpenAI API 格式的云端/本地 LLM |
+| **元数据存储** | SQLite | 知识库名称、描述、文档计数等元数据 |
+| **依赖管理** | Poetry + Conda | Python 3.10+ 环境 |
+| **测试框架** | pytest + pytest-asyncio | 23 个单元测试，Mock ES 和 Embedding |
+
+### 核心流程
+
+```mermaid
+graph TB
+    subgraph 文档入库
+        A[上传 Markdown/TXT] --> B[Markdown 智能分块]
+        B --> C[本地 Embedding 编码]
+        C --> D[ES Bulk 写入]
+        D --> E[SQLite 更新 doc_count]
+    end
+
+    subgraph 智能问答
+        F[用户提问] --> G[BM25 全文检索]
+        F --> H[向量相似度检索]
+        G --> I[RRF 倒数排名融合]
+        H --> I
+        I --> J[构建 Prompt 上下文]
+        J --> K[LLM 流式生成]
+        K --> L[SSE 返回: token → done → sources]
+    end
+
+    subgraph 基础设施
+        ES[(Elasticsearch 7.10)]
+        SQ[(SQLite 元数据)]
+        EM[Embedding 模型]
+        LLM[云端 LLM API]
+    end
+
+    D -.-> ES
+    E -.-> SQ
+    G -.-> ES
+    H -.-> ES
+    H -.-> EM
+    K -.-> LLM
+```
+
+### 检索架构
+
+```mermaid
+graph LR
+    A[用户查询] --> B[Encode 向量]
+    B --> C[BM25 检索 top_K]
+    B --> D[向量检索 top_K]
+    C --> E[RRF 融合]
+    D --> E
+    E --> F[RRF 1/k+r1 + 1/k+r2]
+    F --> G[排序 + 去重]
+    G --> H[返回 top_K 结果]
+```
 
 ## 特性
 
 - **多知识库管理** — 每个知识库对应独立 ES 索引 + SQLite 元数据
-- **Markdown 智能分块** — 按标题层级（# / ## / ###）自动分割
+- **Markdown 智能分块** — 按标题层级（# / ## / ###）自动分割，保留层次结构
 - **两阶段召回 + RRF 融合** — BM25 + 向量(script_score) 检索，RRF 倒数排名融合
-- **SSE 流式问答** — JSON 事件流 (sources → token → done)，实时显示引用文档
+- **SSE 流式问答** — JSON 事件流 (token → done → sources)，先回答后引用
 - **OpenAI 标准协议** — 兼容任何支持 OpenAI API 格式的云端 LLM
 - **统一响应结构** — 所有接口返回 HTTP 200 + `{code, message, data}`，5 位错误码
 
@@ -159,11 +223,77 @@ poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 | 10301   | 问答超时               |
 | 10302   | 无参考资料             |
 
+### SSE 事件格式
+
+问答接口返回 Server-Sent Events 流，每个事件统一包装为 `{code, message, data}`：
+
+```
+# 流式 token
+{"code": 10000, "message": "成功", "data": {"type": "token", "content": "根据..."}}
+
+# 回答完成
+{"code": 10000, "message": "成功", "data": {"type": "done", "content": {"answer": "...", "sources": [...]}}}
+
+# 引用文档（最后发送）
+{"code": 10000, "message": "成功", "data": {"type": "sources", "content": [{"doc_id": "...", "filename": "...", ...}]}}
+
+# 错误事件
+{"code": 10300, "message": "LLM 调用失败", "data": {"type": "error", "content": {"message": "..."}}}
+```
+
+## 项目结构
+
+```
+rag-es-demo/
+├── app/
+│   ├── main.py                  # FastAPI 应用入口
+│   ├── config.py                # Pydantic 配置管理
+│   ├── core/
+│   │   ├── es_client.py         # ES 异步客户端 (v7 专用)
+│   │   ├── embedder.py          # 本地 Embedding 模型
+│   │   ├── kb_store.py          # SQLite 知识库元数据存储
+│   │   ├── error_codes.py       # 5 位错误码定义
+│   │   └── response.py          # 统一 ApiResponse 响应结构
+│   ├── chunkers/
+│   │   └── markdown_chunker.py  # Markdown 标题级分块器
+│   ├── retrievers/
+│   │   ├── bm25_retriever.py    # BM25 全文检索
+│   │   ├── vector_retriever.py  # 向量相似度检索 (script_score)
+│   │   └── hybrid_retriever.py  # RRF 混合检索融合
+│   ├── services/
+│   │   ├── ingest_service.py    # 文档入库流水线
+│   │   └── chat_service.py      # SSE 流式问答
+│   ├── routers/
+│   │   ├── knowledge_base.py    # KB CRUD 端点
+│   │   ├── upload.py            # 文件上传端点
+│   │   ├── search.py            # 检索端点
+│   │   └── chat.py              # SSE 聊天端点
+│   └── schemas/
+│       ├── request.py           # 请求模型
+│       └── response.py          # 响应模型
+├── tests/                       # 单元测试
+├── data/
+│   ├── models/bge-small-zh-v1.5/  # 本地 Embedding 模型
+│   └── kb_store.db              # SQLite 元数据 (运行时生成)
+├── docker-compose.yml           # ES 容器编排
+├── pyproject.toml               # Poetry 依赖管理
+└── .env                         # 环境变量
+```
+
 ## 测试
 
 ```bash
+# 运行全部测试
 poetry run pytest tests/ -v
+
+# 运行单个测试文件
+poetry run pytest tests/test_routers/test_upload.py -v
 ```
+
+测试特点：
+- 自动跳过 ES 连接（替换 lifespan 为 no-op）
+- ES 相关服务通过 `mock.patch` 模拟
+- 纯逻辑测试（chunker、RRF）无需任何依赖
 
 ## 架构
 
@@ -172,3 +302,14 @@ FastAPI → [KB Store (SQLite) | IngestService | RetrieverService | ChatService]
                                             ↓
                     ES 7.10 (script_score + IK) + 本地 Embedding + 云端 LLM
 ```
+
+## 关键设计决策
+
+| 决策 | 选择 | 原因 |
+|------|------|------|
+| ES 客户端版本 | elasticsearch-py **v7** | v8 与 ES 7.x 不兼容 |
+| 向量检索方式 | `script_score` + `cosineSimilarity` | ES 7.10 无原生 kNN |
+| 健康检查 | `info()` 而非 `ping()` | `ping()` 在 v8 客户端对 ES 7.x 不可靠 |
+| 分词器 | `ik_max_word` | 中文细粒度分词，提升检索召回率 |
+| 融合算法 | RRF (k=60) | 无需归一化，对 score 差异鲁棒 |
+| 知识库元数据 | SQLite | 轻量，无额外服务依赖 |
