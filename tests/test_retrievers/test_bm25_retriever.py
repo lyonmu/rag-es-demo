@@ -17,6 +17,7 @@ async def test_bm25_search_builds_heading_aware_bool_query():
         await bm25_search("kb-test", "检索词", top_k=7)
 
         call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs["index"] == "rag_kb_kb-test"
         body = call_kwargs["body"]
 
         assert body["size"] == 7
@@ -27,6 +28,7 @@ async def test_bm25_search_builds_heading_aware_bool_query():
 
         multi_match = should[0]["multi_match"]
         assert multi_match["query"] == "检索词"
+        assert multi_match["operator"] == "or"
         assert multi_match["fields"] == [
             "content^1.0",
             "heading_path^2.0",
