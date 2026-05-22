@@ -27,6 +27,8 @@
 - Add tests beside matching domain folders and name files `test_<module>.py`.
 - Prefer deterministic unit tests with mocks for Elasticsearch/LLM dependencies.
 - Validate both success and error-code paths for API endpoints.
+- Router tests should use `httpx.AsyncClient` + `httpx.ASGITransport` (avoid `TestClient` hangs in this repo’s async/lifespan setup).
+- For route tests, create app via `tests.conftest.create_test_app()` so lifespan is replaced and no real ES/model init is triggered.
 
 ## Commit & Pull Request Guidelines
 - Follow conventional prefixes seen in history: `feat:`, `fix:`, `docs:`.

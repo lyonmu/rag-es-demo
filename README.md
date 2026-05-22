@@ -14,7 +14,7 @@
 | **大语言模型** | LangChain + OpenAI 兼容协议 | 兼容任何支持 OpenAI API 格式的云端/本地 LLM |
 | **元数据存储** | SQLite | 知识库名称、描述、文档计数等元数据 |
 | **依赖管理** | Poetry + Conda | Python 3.10+ 环境 |
-| **测试框架** | pytest + pytest-asyncio | 23 个单元测试，Mock ES 和 Embedding |
+| **测试框架** | pytest + pytest-asyncio | 42 个单元测试，覆盖 chunker/retriever/service/router/schema |
 
 ### 核心流程
 
@@ -69,9 +69,11 @@ graph LR
 ## 特性
 
 - **多知识库管理** — 每个知识库对应独立 ES 索引 + SQLite 元数据
-- **Markdown 智能分块** — 按标题层级（# / ## / ###）自动分割，保留层次结构
-- **两阶段召回 + RRF 融合** — BM25 + 向量(script_score) 检索，RRF 倒数排名融合
+- **Markdown 智能分块** — 标题层级切分 + 超长段二次切分（可配置 overlap/min/max）
+- **两阶段召回 + RRF 融合** — BM25（heading-aware）+ 向量(script_score) 检索，RRF 倒数排名融合
 - **SSE 流式问答** — JSON 事件流 (token → done → sources)，先回答后引用
+- **入库可观测性增强** — 返回 `indexed_chunks_count`、`failed_chunks_count`、`failed_chunk_ids`
+- **检索稳定性增强** — query embedding LRU 缓存、检索分支降级（单路失败可继续返回）
 - **OpenAI 标准协议** — 兼容任何支持 OpenAI API 格式的云端 LLM
 - **统一响应结构** — 所有接口返回 HTTP 200 + `{code, message, data}`，5 位错误码
 
@@ -203,6 +205,23 @@ poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 }
 ```
 
+### Upload 响应示例
+
+```json
+{
+  "code": 10000,
+  "message": "成功",
+  "data": {
+    "doc_id": "abc123",
+    "filename": "test.md",
+    "chunks_count": 2,
+    "indexed_chunks_count": 2,
+    "failed_chunks_count": 0,
+    "failed_chunk_ids": []
+  }
+}
+```
+
 ### 错误码
 
 | 代码    | 说明                   |
@@ -257,9 +276,9 @@ rag-es-demo/
 │   ├── chunkers/
 │   │   └── markdown_chunker.py  # Markdown 标题级分块器
 │   ├── retrievers/
-│   │   ├── bm25_retriever.py    # BM25 全文检索
-│   │   ├── vector_retriever.py  # 向量相似度检索 (script_score)
-│   │   └── hybrid_retriever.py  # RRF 混合检索融合
+│   │   ├── bm25_retriever.py    # heading-aware BM25 检索
+│   │   ├── vector_retriever.py  # 向量相似度检索 (script_score + query cache)
+│   │   └── hybrid_retriever.py  # RRF 混合检索融合 + 失败降级
 │   ├── services/
 │   │   ├── ingest_service.py    # 文档入库流水线
 │   │   └── chat_service.py      # SSE 流式问答
@@ -288,10 +307,14 @@ poetry run pytest tests/ -v
 
 # 运行单个测试文件
 poetry run pytest tests/test_routers/test_upload.py -v
+
+# 查看覆盖率
+poetry run pytest --cov=app --cov-report=term-missing
 ```
 
 测试特点：
-- 自动跳过 ES 连接（替换 lifespan 为 no-op）
+- router 测试基于 `httpx.AsyncClient + ASGITransport`，避免真实网络与服务依赖
+- 测试 app 会覆盖 lifespan（不连接真实 ES，不加载真实 embedding）
 - ES 相关服务通过 `mock.patch` 模拟
 - 纯逻辑测试（chunker、RRF）无需任何依赖
 
@@ -313,3 +336,4 @@ FastAPI → [KB Store (SQLite) | IngestService | RetrieverService | ChatService]
 | 分词器 | `ik_max_word` | 中文细粒度分词，提升检索召回率 |
 | 融合算法 | RRF (k=60) | 无需归一化，对 score 差异鲁棒 |
 | 知识库元数据 | SQLite | 轻量，无额外服务依赖 |
+| 向量查询缓存 | 进程内 LRU | 降低重复 query 的编码开销 |
