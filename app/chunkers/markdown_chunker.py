@@ -122,7 +122,10 @@ def _split_text_with_overlap(
         start = max(end - overlap_chars, start + 1)
 
     if len(parts) >= 2 and len(parts[-1]) < min_chars:
-        parts[-2] = f"{parts[-2]}{parts[-1]}"
+        if overlap_chars > 0:
+            parts[-2] = f"{parts[-2]}{parts[-1][overlap_chars:]}"
+        else:
+            parts[-2] = f"{parts[-2]}{parts[-1]}"
         parts.pop()
 
     return parts
