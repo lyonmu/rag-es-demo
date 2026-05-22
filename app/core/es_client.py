@@ -20,8 +20,13 @@ KB_INDEX_MAPPING = {
             "doc_id": {"type": "keyword"},
             "filename": {"type": "keyword"},
             "heading_path": {"type": "text", "analyzer": "ik_max_word"},
+            "chunk_id": {"type": "keyword"},
             "chunk_index": {"type": "integer"},
             "content": {"type": "text", "analyzer": "ik_max_word"},
+            "content_with_heading": {"type": "text", "analyzer": "ik_max_word"},
+            "content_length": {"type": "integer"},
+            "chunk_text_hash": {"type": "keyword"},
+            "mapping_version": {"type": "keyword"},
             "embedding": {"type": "dense_vector", "dims": 512},
             "created_at": {"type": "date"},
         }
