@@ -1,8 +1,23 @@
 from app.config import Settings
 
 
-def test_settings_defaults():
-    settings = Settings()
+def test_optimization_settings_defaults(monkeypatch):
+    for key in [
+        "CHUNK_MAX_CHARS",
+        "CHUNK_OVERLAP_CHARS",
+        "CHUNK_MIN_CHARS",
+        "QUERY_EMBEDDING_CACHE_SIZE",
+        "INGEST_REFRESH_POLICY",
+        "BM25_HEADING_BOOST",
+        "BM25_CONTENT_BOOST",
+        "BM25_PHRASE_BOOST",
+        "CHAT_CONTEXT_MAX_CHARS",
+        "VECTOR_CANDIDATE_MODE",
+        "VECTOR_CANDIDATE_TOP_K",
+    ]:
+        monkeypatch.delenv(key, raising=False)
+
+    settings = Settings(_env_file=None)
 
     assert settings.chunk_max_chars == 1200
     assert settings.chunk_overlap_chars == 150
