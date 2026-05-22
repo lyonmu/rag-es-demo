@@ -106,7 +106,8 @@ def test_small_tail_merges_into_previous_chunk(monkeypatch):
     monkeypatch.setattr(markdown_chunker.settings, "chunk_overlap_chars", 10)
     monkeypatch.setattr(markdown_chunker.settings, "chunk_min_chars", 30)
 
-    body = "".join(str(i % 10) for i in range(95))
+    # Keep tail chunk length below chunk_min_chars so merge is triggered.
+    body = "".join(str(i % 10) for i in range(92))
     text = "# 长章节\n\n" + body
     chunks = chunk_markdown(text)
 
