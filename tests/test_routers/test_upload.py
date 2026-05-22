@@ -12,7 +12,7 @@ def test_upload_non_md_file_returns_error():
     client = TestClient(app)
 
     with mock.patch("app.routers.upload.get_kb") as mock_get, \
-         mock.patch("app.routers.upload.ingest_markdown") as mock_ingest, \
+         mock.patch("app.routers.upload.ingest_markdown", new_callable=mock.AsyncMock) as mock_ingest, \
          mock.patch("app.routers.upload.update_doc_count") as mock_update:
 
         mock_get.return_value = {
@@ -86,7 +86,7 @@ def test_upload_md_file_success():
     client = TestClient(app)
 
     with mock.patch("app.routers.upload.get_kb") as mock_get, \
-         mock.patch("app.routers.upload.ingest_markdown") as mock_ingest, \
+         mock.patch("app.routers.upload.ingest_markdown", new_callable=mock.AsyncMock) as mock_ingest, \
          mock.patch("app.routers.upload.update_doc_count") as mock_update:
 
         mock_get.return_value = {
@@ -120,7 +120,7 @@ def test_upload_does_not_increment_doc_count_when_no_chunks_indexed():
     client = TestClient(app)
 
     with mock.patch("app.routers.upload.get_kb") as mock_get, \
-         mock.patch("app.routers.upload.ingest_markdown") as mock_ingest, \
+         mock.patch("app.routers.upload.ingest_markdown", new_callable=mock.AsyncMock) as mock_ingest, \
          mock.patch("app.routers.upload.update_doc_count") as mock_update:
         mock_get.return_value = {
             "kb_id": "testkb",

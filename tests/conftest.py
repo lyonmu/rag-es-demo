@@ -1,22 +1,22 @@
 """Pytest fixtures and test app configuration."""
 
+from contextlib import asynccontextmanager
+
 import pytest
 from fastapi.testclient import TestClient
 
 
 def create_test_app():
     """Create a test app that skips lifespan to avoid real ES connection."""
-    from app.main import create_app as _create_app
-    app = _create_app()
-    # Replace lifespan with a no-op to avoid connecting to ES during tests
-    from contextlib import asynccontextmanager
+    import app.main as app_main
 
     @asynccontextmanager
     async def _null_lifespan(app):
         yield
 
-    app.router.lifespan_context = _null_lifespan
-    return app
+    # Override lifespan before app creation so FastAPI binds the no-op lifecycle.
+    app_main.lifespan = _null_lifespan
+    return app_main.create_app()
 
 
 @pytest.fixture
