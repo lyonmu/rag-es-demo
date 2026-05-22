@@ -64,6 +64,10 @@ async def ingest_markdown(kb_id: str, filename: str, content: str) -> dict:
     # 2. Encode
     texts = [c.content for c in chunks]
     embeddings = encode_texts(texts)
+    if len(embeddings) != len(chunks):
+        raise RuntimeError(
+            f"Embedding/chunk count mismatch: embeddings={len(embeddings)} chunks={len(chunks)}"
+        )
 
     # 3. Build bulk operations
     doc_id = uuid4().hex

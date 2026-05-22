@@ -113,3 +113,24 @@ async def test_ingest_markdown_raises_when_all_bulk_items_fail():
 
         with pytest.raises(RuntimeError, match="All chunks failed"):
             await ingest_markdown("test-kb-id", "test.md", content)
+
+
+@pytest.mark.asyncio
+async def test_ingest_markdown_raises_on_embedding_chunk_count_mismatch():
+    chunks = [
+        mock.Mock(content="# A\n\n一", heading_path="A", chunk_index=0),
+        mock.Mock(content="# B\n\n二", heading_path="B", chunk_index=1),
+    ]
+
+    with mock.patch("app.services.ingest_service.chunk_markdown", return_value=chunks), \
+         mock.patch("app.services.ingest_service.get_es_client") as mock_get_es, \
+         mock.patch("app.services.ingest_service.encode_texts") as mock_encode:
+        mock_client = mock.AsyncMock()
+        mock_client.bulk = mock.AsyncMock()
+        mock_get_es.return_value = mock_client
+        mock_encode.return_value = [[0.1] * 512]
+
+        with pytest.raises(RuntimeError, match="Embedding/chunk count mismatch"):
+            await ingest_markdown("test-kb-id", "test.md", "# A\n\n一\n\n# B\n\n二")
+
+        mock_client.bulk.assert_not_called()
