@@ -2,8 +2,8 @@
 
 from contextlib import asynccontextmanager
 
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 
 def create_test_app():
@@ -19,9 +19,16 @@ def create_test_app():
     return app_main.create_app()
 
 
-@pytest.fixture
-def client():
-    """Provide a TestClient instance."""
+@asynccontextmanager
+async def create_async_client():
+    """Provide an AsyncClient backed by ASGITransport for route tests."""
     app = create_test_app()
-    with TestClient(app) as c:
-        yield c
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+@pytest.fixture
+async def async_client():
+    async with create_async_client() as client:
+        yield client
