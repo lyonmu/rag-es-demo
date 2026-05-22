@@ -2,7 +2,7 @@
 
 import logging
 
-from app.core import encode_texts, get_es_client
+from app.core import encode_query, get_es_client
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ async def vector_search(
     Note: ES 7.10 does not support native knn, must use script_score.
     """
     # Encode query text
-    query_vector = encode_texts([query])[0]
+    query_vector = encode_query(query)
 
     client = await get_es_client()
     index = _index_name(kb_id)

@@ -1,6 +1,7 @@
 """Local embedding model singleton using sentence-transformers."""
 
 import logging
+from functools import lru_cache
 
 from sentence_transformers import SentenceTransformer
 
@@ -31,3 +32,9 @@ def encode_texts(texts: list[str]) -> list[list[float]]:
         normalize_embeddings=True,
     )
     return embeddings.tolist()
+
+
+@lru_cache(maxsize=settings.query_embedding_cache_size)
+def encode_query(text: str) -> list[float]:
+    """Encode a single query with an in-process LRU cache."""
+    return encode_texts([text])[0]

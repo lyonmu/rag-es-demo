@@ -1,4 +1,4 @@
-from .embedder import encode_texts, get_embedder
+from .embedder import encode_query, encode_texts, get_embedder
 from .error_codes import ERROR_MESSAGES, SUCCESS, get_error_message
 from .es_client import (
     close_es_client,
@@ -29,6 +29,7 @@ __all__ = [
     "create_kb_index",
     "delete_kb",
     "delete_kb_index",
+    "encode_query",
     "encode_texts",
     "get_embedder",
     "get_error_message",
