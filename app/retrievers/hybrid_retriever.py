@@ -44,12 +44,37 @@ async def hybrid_search(
     # Run both retrievals in parallel
     import asyncio
 
-    bm25_hits, vector_hits = await asyncio.gather(
+    bm25_result, vector_result = await asyncio.gather(
         bm25_search(kb_id, query, top_k=pre_k),
         vector_search(kb_id, query, top_k=pre_k),
+        return_exceptions=True,
     )
 
+    bm25_hits: list[dict] = []
+    vector_hits: list[dict] = []
+    failures: list[str] = []
+
+    if isinstance(bm25_result, Exception):
+        failures.append(f"bm25: {bm25_result}")
+        logger.exception("BM25 retrieval failed for kb=%s query=%s", kb_id, query)
+    else:
+        bm25_hits = bm25_result
+
+    if isinstance(vector_result, Exception):
+        failures.append(f"vector: {vector_result}")
+        logger.exception("Vector retrieval failed for kb=%s query=%s", kb_id, query)
+    else:
+        vector_hits = vector_result
+
+    if failures and not bm25_hits and not vector_hits:
+        raise RuntimeError(f"Both retrieval branches failed: {'; '.join(failures)}")
+
     return _rrf_merge(bm25_hits, vector_hits, k=settings.rrf_k, top_k=top_k)
+
+
+def _hit_identity(hit: dict) -> str:
+    source = hit.get("_source", {})
+    return source.get("chunk_id") or hit.get("_id", "")
 
 
 def _rrf_merge(
@@ -63,11 +88,11 @@ def _rrf_merge(
 
     # Process BM25 results
     for rank, hit in enumerate(bm25_hits, start=1):
-        doc_id = hit["_id"]
+        identity = _hit_identity(hit)
         source = hit.get("_source", {})
-        if doc_id not in docs:
-            docs[doc_id] = RankedDoc(
-                doc_id=doc_id,
+        if identity not in docs:
+            docs[identity] = RankedDoc(
+                doc_id=source.get("doc_id", identity),
                 filename=source.get("filename", ""),
                 heading_path=source.get("heading_path", ""),
                 content=source.get("content", ""),
@@ -75,16 +100,16 @@ def _rrf_merge(
                 bm25_rank=rank,
             )
         else:
-            docs[doc_id].bm25_rank = rank
-            docs[doc_id].bm25_score = hit.get("_score", 0.0)
+            docs[identity].bm25_rank = rank
+            docs[identity].bm25_score = hit.get("_score", 0.0)
 
     # Process Vector results
     for rank, hit in enumerate(vector_hits, start=1):
-        doc_id = hit["_id"]
+        identity = _hit_identity(hit)
         source = hit.get("_source", {})
-        if doc_id not in docs:
-            docs[doc_id] = RankedDoc(
-                doc_id=doc_id,
+        if identity not in docs:
+            docs[identity] = RankedDoc(
+                doc_id=source.get("doc_id", identity),
                 filename=source.get("filename", ""),
                 heading_path=source.get("heading_path", ""),
                 content=source.get("content", ""),
@@ -92,8 +117,8 @@ def _rrf_merge(
                 vector_rank=rank,
             )
         else:
-            docs[doc_id].vector_rank = rank
-            docs[doc_id].vector_score = hit.get("_score", 0.0) if hit.get("_score") else 0.0
+            docs[identity].vector_rank = rank
+            docs[identity].vector_score = hit.get("_score", 0.0) if hit.get("_score") else 0.0
 
     # Calculate RRF scores
     for doc in docs.values():

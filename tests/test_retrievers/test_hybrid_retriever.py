@@ -1,5 +1,8 @@
 """Tests for RRF hybrid retriever (pure logic, no ES required)."""
 
+import pytest
+
+from app.retrievers.hybrid_retriever import hybrid_search
 from app.retrievers.hybrid_retriever import _rrf_merge
 
 
@@ -77,3 +80,72 @@ def test_rrf_score_formula():
 
     expected = 1.0 / (60 + 1) + 1.0 / (60 + 1)
     assert abs(results[0].rrf_score - expected) < 1e-10
+
+
+def test_rrf_prefers_chunk_id_over_es_id():
+    bm25 = [
+        {
+            "_id": "legacy_id_a",
+            "_score": 5.0,
+            "_source": {
+                "chunk_id": "chunk_a",
+                "doc_id": "doc_a",
+                "content": "A",
+                "filename": "a.md",
+                "heading_path": "A",
+            },
+        }
+    ]
+    vector = [
+        {
+            "_id": "different_es_id",
+            "_score": 0.9,
+            "_source": {
+                "chunk_id": "chunk_a",
+                "doc_id": "doc_a",
+                "content": "A",
+                "filename": "a.md",
+                "heading_path": "A",
+            },
+        }
+    ]
+
+    results = _rrf_merge(bm25, vector, k=60, top_k=5)
+
+    assert len(results) == 1
+    assert results[0].doc_id == "doc_a"
+    assert results[0].bm25_score == 5.0
+    assert results[0].vector_score == 0.9
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_returns_vector_results_when_bm25_fails(monkeypatch):
+    async def failing_bm25(*args, **kwargs):
+        raise RuntimeError("bm25 down")
+
+    async def working_vector(*args, **kwargs):
+        return [_make_hit("doc_v", "V", 0.9)]
+
+    monkeypatch.setattr("app.retrievers.hybrid_retriever.bm25_search", failing_bm25)
+    monkeypatch.setattr("app.retrievers.hybrid_retriever.vector_search", working_vector)
+
+    results = await hybrid_search("kb1", "query", top_k=5)
+
+    assert len(results) == 1
+    assert results[0].doc_id == "doc_v"
+    assert results[0].vector_score == 0.9
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_raises_when_both_branches_fail(monkeypatch):
+    async def failing_bm25(*args, **kwargs):
+        raise RuntimeError("bm25 down")
+
+    async def failing_vector(*args, **kwargs):
+        raise RuntimeError("vector down")
+
+    monkeypatch.setattr("app.retrievers.hybrid_retriever.bm25_search", failing_bm25)
+    monkeypatch.setattr("app.retrievers.hybrid_retriever.vector_search", failing_vector)
+
+    with pytest.raises(RuntimeError, match="Both retrieval branches failed"):
+        await hybrid_search("kb1", "query", top_k=5)
