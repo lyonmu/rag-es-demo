@@ -79,3 +79,35 @@ D 的内容。
     chunks = chunk_markdown(text)
     assert len(chunks) == 4
     assert chunks[3].heading_path == "A > B > C > D"
+
+
+def test_long_heading_section_splits_with_overlap(monkeypatch):
+    from app.chunkers import markdown_chunker
+
+    monkeypatch.setattr(markdown_chunker.settings, "chunk_max_chars", 80)
+    monkeypatch.setattr(markdown_chunker.settings, "chunk_overlap_chars", 10)
+    monkeypatch.setattr(markdown_chunker.settings, "chunk_min_chars", 20)
+
+    text = "# 长章节\n\n" + "甲" * 150
+    chunks = chunk_markdown(text)
+
+    assert len(chunks) >= 2
+    assert all(chunk.heading_path == "长章节" for chunk in chunks)
+    assert chunks[0].chunk_index == 0
+    assert chunks[1].chunk_index == 1
+    assert chunks[0].content[-10:] in chunks[1].content
+
+
+def test_small_tail_merges_into_previous_chunk(monkeypatch):
+    from app.chunkers import markdown_chunker
+
+    monkeypatch.setattr(markdown_chunker.settings, "chunk_max_chars", 80)
+    monkeypatch.setattr(markdown_chunker.settings, "chunk_overlap_chars", 10)
+    monkeypatch.setattr(markdown_chunker.settings, "chunk_min_chars", 30)
+
+    text = "# 长章节\n\n" + "乙" * 95
+    chunks = chunk_markdown(text)
+
+    assert len(chunks) == 1
+    assert chunks[0].heading_path == "长章节"
+    assert "乙" * 95 in chunks[0].content
