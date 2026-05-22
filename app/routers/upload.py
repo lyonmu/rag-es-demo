@@ -53,7 +53,7 @@ async def upload_file(kb_id: str, file: UploadFile):
         return ApiResponse.error(code=ES_OPERATION_ERROR, message=f"文档入库失败: {e}")
 
     # 5. Update doc_count in SQLite
-    if result.get("chunks_count", 0) > 0:
+    if result.get("indexed_chunks_count", result.get("chunks_count", 0)) > 0:
         update_doc_count(kb_id, increment=1)
 
     return ApiResponse.success(data=result)
