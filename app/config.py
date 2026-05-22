@@ -32,6 +32,29 @@ class Settings(BaseSettings):
     retriever_top_k: int = 5
     retriever_pre_multiplier: int = 2
 
+    # Chunking
+    chunk_max_chars: int = 1200
+    chunk_overlap_chars: int = 150
+    chunk_min_chars: int = 80
+
+    # Query
+    query_embedding_cache_size: int = 256
+
+    # Ingest
+    ingest_refresh_policy: str = "false"
+
+    # BM25
+    bm25_heading_boost: float = 2.0
+    bm25_content_boost: float = 1.0
+    bm25_phrase_boost: float = 1.5
+
+    # Chat
+    chat_context_max_chars: int = 6000
+
+    # Vector candidate
+    vector_candidate_mode: bool = False
+    vector_candidate_top_k: int = 200
+
     # Service
     app_host: str = "0.0.0.0"
     app_port: int = 8000
