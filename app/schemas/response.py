@@ -1,9 +1,10 @@
 """Response body and SSE event models."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SearchResultItem(BaseModel):
+    chunk_id: str = ""
     doc_id: str
     filename: str
     heading_path: str
@@ -41,6 +42,9 @@ class UploadResponse(BaseModel):
     doc_id: str
     filename: str
     chunks_count: int
+    indexed_chunks_count: int = 0
+    failed_chunks_count: int = 0
+    failed_chunk_ids: list[str] = Field(default_factory=list)
 
 
 class SourceDoc(BaseModel):

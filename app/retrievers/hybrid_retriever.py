@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class RankedDoc:
+    chunk_id: str
     doc_id: str
     filename: str
     heading_path: str
@@ -92,6 +93,7 @@ def _rrf_merge(
         source = hit.get("_source", {})
         if identity not in docs:
             docs[identity] = RankedDoc(
+                chunk_id=identity,
                 doc_id=source.get("doc_id", identity),
                 filename=source.get("filename", ""),
                 heading_path=source.get("heading_path", ""),
@@ -109,6 +111,7 @@ def _rrf_merge(
         source = hit.get("_source", {})
         if identity not in docs:
             docs[identity] = RankedDoc(
+                chunk_id=identity,
                 doc_id=source.get("doc_id", identity),
                 filename=source.get("filename", ""),
                 heading_path=source.get("heading_path", ""),
@@ -139,6 +142,7 @@ def _rrf_merge(
 
     return [
         SearchResultItem(
+            chunk_id=d.chunk_id,
             doc_id=d.doc_id,
             filename=d.filename,
             heading_path=d.heading_path,
